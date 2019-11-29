@@ -1,14 +1,17 @@
 export const ReactiveAggregate = (sub, collection = null, pipeline = [], options = {}) => {
-  import { Meteor } from 'meteor/meteor';
-  import { Mongo } from 'meteor/mongo';
-  import { Promise } from 'meteor/promise';
+  import { Meteor } from "meteor/meteor";
+  import { Mongo } from "meteor/mongo";
+  import { Promise } from "meteor/promise";
 
   // Define new Meteor Error type
-  const TunguskaReactiveAggregateError = Meteor.makeErrorType('tunguska:reactive-aggregate', function(msg) {
-    this.message = msg;
-    this.path = '';
-    this.sanitizedError = new Meteor.Error('Error', 'tunguska:reactive-aggregate');
-  });
+  const TunguskaReactiveAggregateError = Meteor.makeErrorType(
+    "tunguska:reactive-aggregate",
+    function(msg) {
+      this.message = msg;
+      this.path = "";
+      this.sanitizedError = new Meteor.Error("Error", "tunguska:reactive-aggregate");
+    }
+  );
 
   // Check inbound parameter types
   if (!(sub && sub.ready && sub.stop)) {
@@ -35,20 +38,24 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
       debounceCount: 0,
       debounceDelay: 0, // mS
       clientCollection: collection._name,
-      debug: false,
+      debug: false
     },
     ...options
   };
 
   // Check options
-  if (typeof localOptions.noAutomaticObserver !== 'boolean') {
+  if (typeof localOptions.noAutomaticObserver !== "boolean") {
     throw new TunguskaReactiveAggregateError('"options.noAutomaticObserver" must be true or false');
   }
-  if (typeof localOptions.observeSelector !== 'object') {
-    throw new TunguskaReactiveAggregateError('deprecated "options.observeSelector" must be an object');
+  if (typeof localOptions.observeSelector !== "object") {
+    throw new TunguskaReactiveAggregateError(
+      'deprecated "options.observeSelector" must be an object'
+    );
   }
-  if (typeof localOptions.observeOptions !== 'object') {
-    throw new TunguskaReactiveAggregateError('deprecated "options.observeOptions" must be an object');
+  if (typeof localOptions.observeOptions !== "object") {
+    throw new TunguskaReactiveAggregateError(
+      'deprecated "options.observeOptions" must be an object'
+    );
   }
   if (!(localOptions.observers instanceof Array)) {
     throw new TunguskaReactiveAggregateError('"options.observers" must be an array of cursors');
@@ -60,33 +67,42 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
       }
     });
   }
-  if (!(typeof localOptions.debounceCount === 'number')) {
+  if (!(typeof localOptions.debounceCount === "number")) {
     throw new TunguskaReactiveAggregateError('"options.debounceCount" must be a positive integer');
   } else {
     localOptions.debounceCount = parseInt(localOptions.debounceCount, 10);
     if (localOptions.debounceCount < 0) {
-      throw new TunguskaReactiveAggregateError('"options.debounceCount" must be a positive integer');
+      throw new TunguskaReactiveAggregateError(
+        '"options.debounceCount" must be a positive integer'
+      );
     }
   }
-  if (!(typeof localOptions.debounceDelay === 'number')) {
+  if (!(typeof localOptions.debounceDelay === "number")) {
     throw new TunguskaReactiveAggregateError('"options.debounceDelay" must be a positive integer');
   } else {
     localOptions.debounceDelay = parseInt(localOptions.debounceDelay, 10);
     if (localOptions.debounceDelay < 0) {
-      throw new TunguskaReactiveAggregateError('"options.debounceDelay" must be a positive integer');
+      throw new TunguskaReactiveAggregateError(
+        '"options.debounceDelay" must be a positive integer'
+      );
     }
   }
-  if (typeof localOptions.clientCollection !== 'string') {
+  if (typeof localOptions.clientCollection !== "string") {
     throw new TunguskaReactiveAggregateError('"options.clientCollection" must be a string');
   }
-  if (typeof localOptions.debug !== 'function' && localOptions.debug !== true && localOptions.debug !== false) {
+  if (
+    typeof localOptions.debug !== "function" &&
+    localOptions.debug !== true &&
+    localOptions.debug !== false
+  ) {
     throw new TunguskaReactiveAggregateError('"options.debug" must be a boolean or a callback');
   }
 
-
   // Warn about deprecated parameters if used
-  if (Object.keys(localOptions.observeSelector).length !== 0) console.log('tunguska:reactive-aggregate: observeSelector is deprecated');
-  if (Object.keys(localOptions.observeOptions).length !== 0) console.log('tunguska:reactive-aggregate: observeOptions is deprecated');
+  if (Object.keys(localOptions.observeSelector).length !== 0)
+    console.log("tunguska:reactive-aggregate: observeSelector is deprecated");
+  if (Object.keys(localOptions.observeOptions).length !== 0)
+    console.log("tunguska:reactive-aggregate: observeOptions is deprecated");
 
   // observeChanges() will immediately fire an "added" event for each document in the cursor
   // these are skipped using the initializing flag
@@ -97,9 +113,13 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
   const update = () => {
     // add and update documents on the client
     try {
-      const docs = Promise.await(collection.rawCollection().aggregate(pipeline, localOptions.aggregationOptions).toArray());
+      const docs = Promise.await(
+        collection
+          .rawCollection()
+          .aggregate(pipeline, localOptions.aggregationOptions)
+          .toArray()
+      );
       docs.forEach(doc => {
-
         /*  _ids are complicated:
             For tracking here, they must be String
             For minimongo, they must exist and be
@@ -109,15 +129,23 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
           ObjectIds coming via toArray() become POJOs
         */
 
+        // Run optional transform function to make further changes on doc before sending it to client.
+        if (options.hasOwnProperty("transform")) {
+          options.transform(doc);
+        }
+
         let doc_id;
-        if (!doc._id) { // missing or otherwise falsy
-          throw new TunguskaReactiveAggregateError('every aggregation document must have an _id');
+        if (!doc._id) {
+          // missing or otherwise falsy
+          throw new TunguskaReactiveAggregateError("every aggregation document must have an _id");
         } else if (doc._id instanceof Mongo.ObjectID) {
           doc_id = doc._id.toHexString();
-        } else if (typeof doc._id === 'object') {
+        } else if (typeof doc._id === "object") {
           doc_id = doc._id.toString();
-        } else if (typeof doc._id !== 'string') {
-          throw new TunguskaReactiveAggregateError('aggregation document _id is not an allowed type');
+        } else if (typeof doc._id !== "string") {
+          throw new TunguskaReactiveAggregateError(
+            "aggregation document _id is not an allowed type"
+          );
         } else {
           doc_id = doc._id;
         }
@@ -139,26 +167,30 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
         }
       });
       sub._iteration++;
-      if (localOptions.debug) console.log(`Reactive-Aggregate: publish: ready`)
-      sub.ready();           // Mark the subscription as ready
+      if (localOptions.debug) console.log(`Reactive-Aggregate: publish: ready`);
+      sub.ready(); // Mark the subscription as ready
     } catch (err) {
-      throw new TunguskaReactiveAggregateError (err.message);
+      throw new TunguskaReactiveAggregateError(err.message);
     }
-  }
+  };
 
   let currentDebounceCount = 0;
   let timer;
 
-  const debounce = (notification) => {
+  const debounce = notification => {
     if (initializing) return;
-    if (localOptions.debug) console.log(`Reactive-Aggregate: collection: ${notification.name}: publish: ${notification.mutation}, _id: ${notification.id}`)
-    if (!timer && localOptions.debounceCount > 0) timer = Meteor.setTimeout(update, localOptions.debounceDelay);
+    if (localOptions.debug)
+      console.log(
+        `Reactive-Aggregate: collection: ${notification.name}: publish: ${notification.mutation}, _id: ${notification.id}`
+      );
+    if (!timer && localOptions.debounceCount > 0)
+      timer = Meteor.setTimeout(update, localOptions.debounceDelay);
     if (++currentDebounceCount > localOptions.debounceCount) {
       currentDebounceCount = 0;
       Meteor.clearTimeout(timer);
       update();
     }
-  }
+  };
 
   if (!localOptions.noAutomaticObserver) {
     const cursor = collection.find(localOptions.observeSelector, localOptions.observeOptions);
@@ -169,38 +201,45 @@ export const ReactiveAggregate = (sub, collection = null, pipeline = [], options
   // track any changes on the observed cursors
   localOptions.observers.forEach(cursor => {
     const name = cursor._cursorDescription.collectionName;
-    if (localOptions.debug) console.log(`Reactive-Aggregate: collection: ${name}: initialise observer`)
-    handles.push(cursor.observeChanges({
-      added(id) {
-        debounce({ name, mutation: 'added', id } );
-      },
-      changed(id) {
-        debounce({ name, mutation: 'changed', id });
-      },
-      removed(id) {
-        debounce({ name, mutation: 'removed', id });
-      },
-      error(err) {
-        throw new TunguskaReactiveAggregateError (err.message);
-      }
-    }));
+    if (localOptions.debug)
+      console.log(`Reactive-Aggregate: collection: ${name}: initialise observer`);
+    handles.push(
+      cursor.observeChanges({
+        added(id) {
+          debounce({ name, mutation: "added", id });
+        },
+        changed(id) {
+          debounce({ name, mutation: "changed", id });
+        },
+        removed(id) {
+          debounce({ name, mutation: "removed", id });
+        },
+        error(err) {
+          throw new TunguskaReactiveAggregateError(err.message);
+        }
+      })
+    );
   });
 
   // stop observing the cursors when the client unsubscribes
   sub.onStop(() => {
-    if (options.debug) console.log(`Reactive-Aggregate: stopping observers`)
+    if (options.debug) console.log(`Reactive-Aggregate: stopping observers`);
     handles.forEach(handle => {
       handle.stop();
     });
   });
   // End of the setup phase. We don't need to do any of that again!
 
-  if (typeof localOptions.debug === 'function') {
-    const explain = Promise.await(collection.rawCollection().aggregate(pipeline, localOptions.aggregationOptions).explain());
+  if (typeof localOptions.debug === "function") {
+    const explain = Promise.await(
+      collection
+        .rawCollection()
+        .aggregate(pipeline, localOptions.aggregationOptions)
+        .explain()
+    );
     localOptions.debug(explain);
   }
 
-  initializing = false;  // Clear the initializing flag. From here, we're on autopilot
-  update();              // Send an initial result set to the client
-
+  initializing = false; // Clear the initializing flag. From here, we're on autopilot
+  update(); // Send an initial result set to the client
 };
